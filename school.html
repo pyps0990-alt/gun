@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>友軍單位 - ALLIED FORCES</title>
+    <style>
+        /* --- 核心變數 --- */
+        :root { 
+            --bg-color: #050505; 
+            --main-green: #00ff41; 
+            --cyan: #0ff; 
+            --alert: #ff3333; 
+            --warning: #ffcc00;
+            --dark-grid: rgba(0, 255, 65, 0.05);
+            --card-bg: rgba(0, 20, 0, 0.6);
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Consolas', monospace; }
+        
+        body { 
+            background-color: var(--bg-color); 
+            color: var(--main-green); 
+            min-height: 100vh; 
+            display: flex; flex-direction: column; 
+            overflow-x: hidden; padding-top: 80px; 
+        }
+
+        /* 網格背景 */
+        body::before { 
+            content: ""; position: absolute; width: 100%; height: 100%; 
+            background: linear-gradient(var(--dark-grid) 1px, transparent 1px), linear-gradient(90deg, var(--dark-grid) 1px, transparent 1px); 
+            background-size: 50px 50px; z-index: -2; pointer-events: none; position: fixed;
+        }
+        
+        /* --- Header --- */
+        header { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 70px; 
+            background: rgba(0, 15, 0, 0.95); 
+            border-bottom: 1px solid var(--main-green); 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 0 2rem; z-index: 1000; backdrop-filter: blur(10px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+
+        .logo {
+            font-weight: 900; font-size: 1.4rem; color: var(--main-green);
+            text-decoration: none; letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--main-green); display: flex; align-items: center;
+        }
+        .logo::before { content: "///"; margin-right: 10px; color: var(--alert); }
+
+        /* --- 下拉選單 --- */
+        .dropdown { position: relative; display: inline-block; }
+        .drop-btn {
+            background: transparent; color: var(--main-green);
+            border: 1px solid var(--main-green); padding: 10px 20px;
+            font-family: 'Consolas', monospace; font-size: 1rem;
+            cursor: pointer; transition: 0.3s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .drop-btn:hover { background: var(--main-green); color: black; box-shadow: 0 0 15px var(--main-green); }
+        .dropdown-content {
+            display: none; position: absolute; right: 0; top: 100%;
+            background-color: #000; min-width: 200px;
+            border: 1px solid var(--main-green);
+            box-shadow: 0 10px 30px rgba(0, 255, 65, 0.2); z-index: 1001;
+        }
+        .dropdown-content a {
+            color: var(--main-green); padding: 12px 16px;
+            text-decoration: none; display: block;
+            border-bottom: 1px solid rgba(0, 255, 65, 0.2); transition: 0.2s; font-size: 0.9rem;
+        }
+        .dropdown-content a:last-child { border-bottom: none; }
+        .dropdown-content a:hover { background: rgba(0, 255, 65, 0.2); padding-left: 25px; }
+        .show-menu { display: block; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- HUD --- */
+        #tactical-overlay { 
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-150%); 
+            width: 90%; max-width: 400px; background: rgba(0, 15, 0, 0.95); border: 2px solid var(--main-green); 
+            padding: 15px 20px; z-index: 9999; box-shadow: 0 0 30px rgba(0, 255, 65, 0.3); 
+            transition: transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); 
+            display: flex; align-items: center; clip-path: polygon(0 0, 100% 0, 100% 80%, 95% 100%, 5% 100%, 0 80%); 
+        }
+        #tactical-overlay.show { transform: translateX(-50%) translateY(0); }
+        .hud-icon { font-size: 2rem; margin-right: 15px; color: var(--main-green); animation: blink 1s infinite; }
+        #tactical-overlay.alert-mode { border-color: var(--alert); box-shadow: 0 0 30px rgba(255, 51, 51, 0.3); }
+        #tactical-overlay.alert-mode .hud-icon, #tactical-overlay.alert-mode h4 { color: var(--alert); }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* --- 主要內容區 --- */
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; width: 100%; }
+        h1 { 
+            border-bottom: 2px solid var(--main-green); padding-bottom: 15px; margin-bottom: 30px; 
+            letter-spacing: 3px; font-size: 1.8rem; text-transform: uppercase;
+        }
+
+        .grid-system { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+            gap: 25px; 
+        }
+
+        /* 學校卡片樣式 */
+        .unit-card { 
+            border: 1px solid rgba(0, 255, 65, 0.3); 
+            background: var(--card-bg); 
+            padding: 25px; position: relative; transition: 0.3s; cursor: pointer;
+            display: flex; flex-direction: column; justify-content: space-between; min-height: 180px;
+            animation: fadeIn 0.5s ease-out;
+        }
+        .unit-card::before { content: ""; position: absolute; top: -1px; left: -1px; width: 15px; height: 15px; border-top: 2px solid var(--cyan); border-left: 2px solid var(--cyan); }
+        .unit-card::after { content: ""; position: absolute; bottom: -1px; right: -1px; width: 15px; height: 15px; border-bottom: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
+        .unit-card:hover { 
+            transform: translateY(-5px); 
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2); 
+            background: rgba(0, 40, 0, 0.9); 
+            border-color: var(--main-green);
+        }
+        .unit-code { font-size: 0.8rem; color: var(--cyan); margin-bottom: 10px; display: block; letter-spacing: 1px; }
+        .unit-name { font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; color: #fff; text-shadow: 0 0 5px rgba(0,255,65,0.5); }
+        .unit-footer {
+            display: flex; justify-content: space-between; align-items: flex-end; 
+            color: #888; font-size: 0.8rem; border-top: 1px dashed #333; padding-top: 10px;
+        }
+        
+        .status-online { color: var(--main-green); display: flex; align-items: center; gap: 5px; }
+        .status-offline { color: #555; display: flex; align-items: center; gap: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+        .loading-text { color: var(--dark-grid); font-size: 1.5rem; animation: pulse 1s infinite; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+
+        /* RWD */
+        @media (max-width: 768px) { header { padding: 0 1rem; } }
+    </style>
+</head>
+<body>
+
+    <div id="tactical-overlay">
+        <div class="hud-icon">⚡</div>
+        <div>
+            <h4 id="hud-title" style="margin:0;color:var(--cyan)">SYSTEM</h4>
+            <p id="hud-msg" style="margin:0;color:#ccc">...</p>
+        </div>
+    </div>
+
+    <header>
+        <a href="index.html" class="logo">軍武交流網</a>
+        <div class="dropdown">
+            <button onclick="toggleMenu()" class="drop-btn">▼ COMMAND MENU</button>
+            <div id="myDropdown" class="dropdown-content">
+                <a href="school.html">>> 相關學校 (ALLIED)</a>
+                <a href="register.html">>> 活動報名 (ENLIST)</a>
+                <a href="about.html">>> 關於我們 (INTEL)</a>
+                <a href="survival.html">>> 生存指南 (MANUAL)</a>
+                <a href="admin.html" style="color:var(--warning); border-top:1px dashed var(--warning)">[!] 管理後台 (ADMIN)</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <h1>>> DETECTED ALLIED UNITS (友軍單位)</h1>
+        
+        <div id="unit-grid" class="grid-system">
+            <div class="loading-text">SCANNING FREQUENCIES...</div>
+        </div>
+    </div>
+
+    <script>
+        // 選單功能
+        function toggleMenu() { document.getElementById("myDropdown").classList.toggle("show-menu"); }
+        window.onclick = function(event) {
+            if (!event.target.matches('.drop-btn')) {
+                var dropdowns = document.getElementsByClassName("dropdown-content");
+                for (var i = 0; i < dropdowns.length; i++) {
+                    if (dropdowns[i].classList.contains('show-menu')) dropdowns[i].classList.remove('show-menu');
+                }
+            }
+        }
+
+        // HUD 功能
+        const hud = document.getElementById('tactical-overlay');
+        const hudTitle = document.getElementById('hud-title');
+        const hudMsg = document.getElementById('hud-msg');
+        let hideTimer;
+
+        // 我們把這個函式掛到 window 上，這樣生成的 HTML onclick 才能呼叫
+        window.showTacticalMsg = function(message, isAlert = false) {
+            hudMsg.innerText = message;
+            if (isAlert) { 
+                hud.classList.add('alert-mode'); 
+                hudTitle.innerText = "ACCESS DENIED"; 
+                hudTitle.style.color="var(--alert)"; 
+            } else { 
+                hud.classList.remove('alert-mode'); 
+                hudTitle.innerText = "LINK ESTABLISHED"; 
+                hudTitle.style.color="var(--cyan)"; 
+            }
+            hud.classList.add('show');
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => { hud.classList.remove('show'); }, 2000);
+        }
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // ★★★ 務必填入你的 Config ★★★
+        const firebaseConfig = {
+            apiKey: "AIzaSyA_ZvJSGxddMfZ9zfq-51L65UPbSMP_Cng",
+            authDomain: "survival-game-6c3c3.firebaseapp.com",
+            databaseURL: "https://survival-game-6c3c3-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "survival-game-6c3c3",
+            storageBucket: "survival-game-6c3c3.firebasestorage.app",
+            messagingSenderId: "403646809893",
+            appId: "1:403646809893:web:84d94bcd134dcbeb29bccc"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        // 讀取 "schools" 節點
+        const schoolsRef = ref(db, 'schools');
+        const grid = document.getElementById('unit-grid');
+
+        onValue(schoolsRef, (snapshot) => {
+            grid.innerHTML = ''; // 清空目前的內容
+            
+            if (!snapshot.exists()) {
+                grid.innerHTML = '<div style="color:#555;">> NO ACTIVE SIGNALS DETECTED.</div>';
+                return;
+            }
+
+            snapshot.forEach((child) => {
+                const data = child.val();
+                // 處理狀態樣式
+                const isOnline = data.status === "ONLINE";
+                const statusClass = isOnline ? "status-online" : "status-offline";
+                const cardClickMsg = isOnline 
+                    ? `LINK ESTABLISHED: ${data.code} UNIT` 
+                    : `SIGNAL ENCRYPTED: ${data.code}`;
+                const isAlert = !isOnline;
+
+                // 生成 HTML
+                const card = document.createElement('div');
+                card.className = 'unit-card';
+                // 加入點擊事件
+                card.onclick = () => window.showTacticalMsg(cardClickMsg, isAlert);
+
+                card.innerHTML = `
+                    <div>
+                        <span class="unit-code">ID: ${data.code}</span>
+                        <div class="unit-name">${data.name}</div>
+                    </div>
+                    <div class="unit-footer">
+                        <span>TYPE: ${data.type}</span>
+                        <span class="${statusClass}">
+                            <div class="dot"></div> ${data.status}
+                        </span>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        });
+    </script>
+</body>
+</html>

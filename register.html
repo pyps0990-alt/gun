@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQUAD REGISTRATION V3.1 (STABLE)</title>
+    <style>
+        :root { --bg: #000; --green: #33ff00; --dim: #1a8000; --alert: #ff0033; --white: #ddd; }
+        body { background: var(--bg); color: var(--green); font-family: 'Courier New', monospace; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; margin: 0; }
+        
+        /* HUD 彈窗 */
+        #hud-layer {
+            position: fixed; top: 10%; left: 50%; transform: translate(-50%, -200%);
+            border: 2px solid var(--green); background: rgba(0,20,0,0.95);
+            padding: 15px 30px; z-index: 1000; box-shadow: 0 0 20px rgba(51,255,0,0.2);
+            transition: transform 0.4s ease-out; display: flex; align-items: center; gap: 15px;
+        }
+        #hud-layer.show { transform: translate(-50%, 0); }
+        #hud-layer.alert { border-color: var(--alert); color: var(--alert); box-shadow: 0 0 20px rgba(255,0,51,0.2); }
+        .hud-icon { font-size: 2rem; animation: blink 1s infinite; }
+        
+        /* 開機動畫 */
+        #boot { position: fixed; inset: 0; background: black; z-index: 999; padding: 20px; font-size: 1.2rem; display: flex; flex-direction: column; justify-content: flex-end; }
+        
+        /* 主介面 */
+        #terminal { display: none; width: 90%; max-width: 550px; border: 2px solid var(--green); background: rgba(0,10,0,0.9); padding: 30px; box-shadow: 0 0 30px rgba(51,255,0,0.1); position: relative; animation: turnOn 0.3s forwards; }
+        
+        .nav-back {
+            position: absolute; top: 20px; right: 20px;
+            color: var(--dim); text-decoration: none; font-size: 0.8rem;
+            border: 1px solid var(--dim); padding: 5px 10px; transition: 0.2s;
+        }
+        .nav-back:hover { background: var(--green); color: black; box-shadow: 0 0 10px var(--green); }
+
+        h1 { border-bottom: 2px solid var(--dim); padding-bottom: 10px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: flex-end; }
+        
+        select, input { width: 100%; background: #001100; color: var(--green); border: 1px solid var(--green); padding: 12px; margin-bottom: 10px; font-family: inherit; font-size: 1.1rem; outline: none; box-sizing: border-box; }
+        select { cursor: pointer; text-transform: uppercase; }
+        
+        /* 動態表單容器 */
+        #dynamic-form-area {
+            margin-bottom: 15px;
+            max-height: 250px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        #dynamic-form-area::-webkit-scrollbar { width: 5px; }
+        #dynamic-form-area::-webkit-scrollbar-thumb { background: var(--dim); }
+
+        label { display: block; font-size: 0.8rem; color: var(--dim); margin-bottom: 3px; margin-top: 10px; }
+
+        .status-bar { border: 1px solid var(--dim); padding: 10px; margin-bottom: 20px; background: rgba(0,50,0,0.1); }
+        .bar-grid { display: flex; height: 20px; gap: 2px; margin-top: 5px; }
+        .cell { flex: 1; background: #111; border: 1px solid #333; }
+        .cell.active { background: var(--green); box-shadow: 0 0 5px var(--green); }
+        .cell.full { background: var(--alert); border-color: red; }
+        
+        button { width: 100%; padding: 12px; background: var(--dim); color: black; font-weight: bold; font-size: 1.1rem; border: none; cursor: pointer; margin-top: 10px; }
+        button:hover { background: var(--green); box-shadow: 0 0 15px var(--green); }
+        button:disabled { background: #333; color: #666; cursor: not-allowed; box-shadow: none; }
+        
+        .log-area { margin-top: 20px; height: 80px; font-size: 0.8rem; color: #666; border-top: 1px dashed #333; padding-top: 10px; overflow: hidden; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        @keyframes turnOn { from { transform: scaleY(0.1); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="hud-layer">
+        <div class="hud-icon">⚠</div>
+        <div id="hud-text">SYSTEM MESSAGE</div>
+    </div>
+
+    <div id="boot"></div>
+
+    <div id="terminal">
+        <a href="index.html" class="nav-back">[ EXIT TO MENU ]</a>
+
+        <h1><span>SURVIVAL_OS</span><small style="font-size:0.8rem">V.3.1</small></h1>
+        
+        <select id="sel-mission"><option>INITIALIZING...</option></select>
+        
+        <div class="status-bar">
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem">
+                <span>SQUAD CAPACITY</span>
+                <span id="count-display">0 / --</span>
+            </div>
+            <div class="bar-grid" id="bar"></div>
+        </div>
+
+        <div id="dynamic-form-area">
+            <div style="text-align:center; color:#666; padding:20px;">
+                > SELECT A MISSION TO LOAD PROTOCOLS...
+            </div>
+        </div>
+
+        <button id="btn-submit" disabled>WAITING FOR MISSION...</button>
+        
+        <div class="log-area" id="logs"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue, push, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // ★★★ Firebase Config ★★★
+        const firebaseConfig = {
+            apiKey: "AIzaSyA_ZvJSGxddMfZ9zfq-51L65UPbSMP_Cng",
+            authDomain: "survival-game-6c3c3.firebaseapp.com",
+            databaseURL: "https://survival-game-6c3c3-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "survival-game-6c3c3",
+            storageBucket: "survival-game-6c3c3.firebasestorage.app",
+            messagingSenderId: "403646809893",
+            appId: "1:403646809893:web:84d94bcd134dcbeb29bccc"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        // ★ 請確認你的 Google Apps Script 網址是否正確 (記得重新部署為新版本)
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzF_BDVknII3UYxw1B6NogxWq-LOjO7OrlLs_ibeeDEoz1-f9SIYE4Otx1GjeVX5MOt/exec"; 
+
+        // UI 綁定
+        const ui = {
+            sel: document.getElementById('sel-mission'),
+            bar: document.getElementById('bar'),
+            cnt: document.getElementById('count-display'),
+            formArea: document.getElementById('dynamic-form-area'),
+            btn: document.getElementById('btn-submit'),
+            logs: document.getElementById('logs'),
+            hud: document.getElementById('hud-layer'),
+            hudText: document.getElementById('hud-text')
+        };
+
+        let curEvent = null;
+        let curMax = 0;
+        let curSheetUrl = ""; 
+        let curColumns = []; // 儲存目前的欄位設定
+
+        // Boot Animation
+        const txts = ["SYSTEM START...", "LOADING MODULES...", "SYNCING DB...", "READY."];
+        let ti = 0;
+        function boot(){
+            if(ti<txts.length){
+                let d=document.createElement('div'); d.innerText="> "+txts[ti++];
+                document.getElementById('boot').appendChild(d);
+                setTimeout(boot, 200);
+            } else {
+                setTimeout(()=>{
+                    document.getElementById('boot').style.display='none';
+                    document.getElementById('terminal').style.display='block';
+                }, 400);
+            }
+        }
+        boot();
+
+        function showHud(msg, alert=false){
+            ui.hudText.innerText = msg;
+            ui.hud.className = alert ? 'alert show' : 'show';
+            setTimeout(()=>ui.hud.classList.remove('show'), 2000);
+        }
+        
+        function log(m){ 
+            console.log("[LOG]", m);
+            ui.logs.innerHTML = `> ${m}<br>` + ui.logs.innerHTML; 
+        }
+
+        // 1. 讀取活動列表
+        onValue(ref(db, 'events'), snap => {
+            ui.sel.innerHTML = '<option value="">-- SELECT MISSION --</option>';
+            if(snap.exists()){
+                snap.forEach(c => {
+                    const data = c.val();
+                    let op = document.createElement('option');
+                    op.value = c.key;
+                    op.innerText = data.name;
+                    op.dataset.max = data.maxCapacity;
+                    op.dataset.sheet = data.excelUrl || ""; 
+                    
+                    // 處理欄位設定
+                    let cols = data.columns || ["姓名", "代號/學號", "單位/班級"];
+                    if(typeof cols === 'string') {
+                        // 防止存進去的是字串而非陣列
+                        cols = cols.split(','); 
+                    }
+                    cols = cols.filter(c => c !== "報名時間");
+                    op.dataset.cols = JSON.stringify(cols);
+
+                    ui.sel.appendChild(op);
+                });
+            } else {
+                log("DB CONNECTED BUT EMPTY.");
+            }
+        });
+
+        // 2. 切換活動 -> 動態產生輸入框
+        ui.sel.addEventListener('change', e => {
+            const eid = e.target.value;
+            ui.bar.innerHTML = '';
+            ui.formArea.innerHTML = ''; 
+            
+            if(!eid) { 
+                curEvent=null; ui.btn.disabled=true; 
+                ui.formArea.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">> STANDBY...</div>';
+                return; 
+            }
+            
+            const selectedOption = e.target.selectedOptions[0];
+            curEvent = eid;
+            curMax = parseInt(selectedOption.dataset.max) || 10;
+            curSheetUrl = selectedOption.dataset.sheet;
+            
+            // ★ 解析欄位設定 (加強防呆)
+            try {
+                curColumns = JSON.parse(selectedOption.dataset.cols);
+            } catch(err) {
+                console.error("Columns parse error", err);
+                curColumns = ["姓名", "代號/學號"]; // 讀取失敗時的預設值
+            }
+
+            // ★ 動態產生輸入框 (GENERATOR)
+            curColumns.forEach((colName, index) => {
+                let label = document.createElement('label');
+                label.innerText = `[ INPUT ${index+1} ] ${colName.toUpperCase()}`;
+                
+                let input = document.createElement('input');
+                input.type = "text";
+                input.className = "dynamic-input";
+                input.dataset.label = colName;    
+                input.placeholder = `ENTER ${colName}...`;
+
+                if(colName.includes("電話")) input.type = "tel";
+                
+                ui.formArea.appendChild(label);
+                ui.formArea.appendChild(input);
+            });
+
+            // 繪製進度條
+            for(let i=0; i<curMax; i++){
+                let d=document.createElement('div'); d.className='cell'; d.id='c-'+i;
+                ui.bar.appendChild(d);
+            }
+            
+            ui.btn.disabled = false;
+            ui.btn.innerText = "CONFIRM DEPLOYMENT";
+            
+            // 監聽人數
+            onValue(ref(db, `events/${eid}/participants`), s => {
+                const count = s.exists() ? Object.keys(s.val()).length : 0;
+                ui.cnt.innerText = `${count} / ${curMax}`;
+                for(let i=0; i<curMax; i++){
+                    let c = document.getElementById('c-'+i);
+                    if(c){
+                        c.className = 'cell'; 
+                        if(i<count) c.classList.add('active');
+                        if(count>=curMax && i<count) c.classList.add('full');
+                    }
+                }
+                if(count >= curMax){
+                    ui.btn.innerText = "MISSION FULL";
+                    ui.btn.disabled = true;
+                    ui.btn.style.background = "var(--alert)";
+                } else {
+                    ui.btn.innerText = "CONFIRM DEPLOYMENT";
+                    ui.btn.disabled = false;
+                    ui.btn.style.background = "";
+                }
+            });
+        });
+
+        // 3. 提交按鈕
+        ui.btn.addEventListener('click', ()=>{
+            const inputs = document.querySelectorAll('.dynamic-input');
+            let formData = {};
+            let excelRow = []; 
+            let missing = false;
+
+            // Excel 第一欄自動填入時間
+            const timeStr = new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'});
+            excelRow.push(timeStr);
+
+            inputs.forEach(inp => {
+                const val = inp.value.trim();
+                let key = inp.dataset.label;
+                
+                // ★★★ 修正重點：把 Firebase 不允許的符號 (如 / . # $ [ ]) 替換成底線 _
+                key = key.replace(/[.#$\/\[\]]/g, '_'); 
+
+                if(!val) missing = true;
+                
+                formData[key] = val; // 現在 "代號/學號" 會變成 "代號_學號" (這樣 Firebase 就收了)
+                excelRow.push(val);  // Excel 是存陣列，不受影響
+            });
+
+            if(missing) { showHud("MISSING DATA", true); return; }
+            
+            ui.btn.disabled = true;
+            log("DATA PACKAGED. SENDING...");
+
+            // 寫入 Firebase
+            push(ref(db, `events/${curEvent}/participants`), {
+                ...formData, 
+                timestamp: serverTimestamp()
+            }).then(()=>{
+                showHud("DEPLOYMENT APPROVED");
+                log(`DB SYNC SUCCESS.`);
+                
+                // ★ 呼叫 Excel 同步
+                if(curSheetUrl) {
+                    syncToExcel(curSheetUrl, excelRow);
+                } else {
+                    log("NOTE: NO EXCEL LINKED.");
+                }
+
+                // 清空輸入框
+                inputs.forEach(inp => inp.value = '');
+                
+            }).catch(e => {
+                console.error(e);
+                showHud("ERROR: DB WRITE FAILED", true);
+                log("DB ERROR: " + e.message); // 這裡會印出錯誤原因
+                ui.btn.disabled = false;
+            });
+        });
+
+        // 4. Excel 同步函式 (接收 Array)
+        function syncToExcel(missionExcelUrl, rowDataArray) {
+            log("CONNECTING TO CLOUD NODE...");
+            
+            const payload = JSON.stringify({
+                action: "register",
+                sheetUrl: missionExcelUrl,
+                rowData: rowDataArray // 傳送陣列
+            });
+
+            console.log("Sending Payload:", payload);
+
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors", // 重要：GAS 跨域請求必須用 no-cors
+                headers: { "Content-Type": "application/json" },
+                body: payload
+            }).then(() => {
+                // 因 no-cors，這裡只能代表請求已發出，無法得知回傳結果
+                log("SIGNAL SENT TO EXCEL.");
+                console.log("Request sent.");
+            }).catch(err => {
+                console.error("Excel sync failed:", err);
+                log("EXCEL NETWORK ERROR.");
+            });
+        }
+    </script>
+</body>
+</html>

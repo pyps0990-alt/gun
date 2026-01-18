@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COMMAND CONSOLE - ADMIN</title>
+    <style>
+        :root {
+            --bg: #050000;
+            --red: #ff0033;
+            --dim-red: #660000;
+            --green: #00ff41; /* 新增綠色定義 */
+            --white: #ffffff;
+            --overlay: rgba(0, 0, 0, 0.85);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--red);
+            font-family: 'Courier New', monospace;
+            margin: 0; padding: 0;
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        /* --- 登入畫面 --- */
+        #login-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); z-index: 1000;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .login-box {
+            border: 2px solid var(--red); padding: 40px; width: 300px;
+            box-shadow: 0 0 25px rgba(255, 0, 51, 0.15); text-align: center;
+        }
+        .login-title {
+            font-size: 1.5rem; border-bottom: 1px dashed var(--dim-red);
+            padding-bottom: 10px; margin-bottom: 20px; letter-spacing: 2px;
+        }
+
+        /* --- 自定義 HUD 彈窗 --- */
+        #hud-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--overlay); z-index: 9999;
+            justify-content: center; align-items: center;
+            backdrop-filter: blur(2px);
+        }
+        .hud-box {
+            width: 400px; max-width: 90%;
+            background: #000; border: 2px solid var(--red);
+            padding: 2px;
+            box-shadow: 0 0 30px rgba(255, 0, 51, 0.3);
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .hud-inner {
+            border: 1px solid var(--dim-red); padding: 20px;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+        .hud-header {
+            background: var(--red); color: black; font-weight: bold;
+            padding: 5px 10px; font-size: 0.9rem; letter-spacing: 1px;
+            display: inline-block; width: fit-content;
+        }
+        .hud-content { font-size: 1.1rem; line-height: 1.5; color: white; min-height: 40px; }
+        .hud-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        
+        .hud-btn {
+            background: transparent; border: 1px solid var(--red); color: var(--red);
+            padding: 10px 20px; cursor: pointer; font-family: inherit; font-weight: bold;
+            transition: 0.2s; text-transform: uppercase;
+        }
+        .hud-btn:hover { background: var(--red); color: black; box-shadow: 0 0 10px var(--red); }
+        .hud-btn.cancel { border-color: #666; color: #888; }
+        .hud-btn.cancel:hover { background: #333; color: white; border-color: white; }
+
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        /* --- 主控制台 --- */
+        #admin-panel {
+            display: none; width: 100%; max-width: 800px;
+            padding: 20px; box-sizing: border-box;
+        }
+
+        header { border-bottom: 2px solid var(--dim-red); padding-bottom: 15px; margin-bottom: 30px; margin-top: 20px; }
+        .brand-area { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; }
+        .brand-logo { font-size: 2rem; font-weight: bold; letter-spacing: 2px; text-shadow: 0 0 10px var(--red); line-height: 1; }
+        .brand-sub { font-size: 0.8rem; color: var(--dim-red); letter-spacing: 1px; }
+
+        .nav-bar { display: flex; gap: 10px; }
+        .nav-btn {
+            background: transparent; border: 1px solid var(--dim-red); color: var(--dim-red);
+            padding: 8px 16px; cursor: pointer; font-family: inherit; font-size: 1rem;
+            transition: 0.2s; flex: 1; text-align: center;
+        }
+        .nav-btn:hover { border-color: var(--red); color: var(--red); }
+        .nav-btn.active {
+            background: var(--red); color: black; border-color: var(--red);
+            box-shadow: 0 0 15px var(--red); font-weight: bold;
+        }
+        .btn-logout { flex: 0 0 auto; border-color: #444; color: #888; }
+        .btn-logout:hover { background: #333; color: white; border-color: white; }
+
+        .view-section { display: none; animation: fadeIn 0.3s; }
+        .view-section.active { display: block; }
+
+        input, select, textarea {
+            width: 100%; background: #1a0000; border: 1px solid var(--red);
+            color: var(--red); padding: 12px; font-family: inherit; font-size: 1rem;
+            outline: none; box-sizing: border-box; margin-bottom: 10px;
+        }
+        .btn-main {
+            width: 100%; background: var(--red); color: black; border: none; padding: 12px;
+            font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+            transition: 0.2s; margin-top: 5px;
+        }
+        .btn-main:hover { background: white; box-shadow: 0 0 15px white; }
+        .section-box { border: 1px dashed var(--dim-red); padding: 20px; margin-bottom: 30px; background: rgba(50, 0, 0, 0.1); }
+        .row { display: flex; gap: 10px; }
+
+        .list-header { font-size: 1.2rem; margin-bottom: 15px; color: var(--white); border-left: 4px solid var(--red); padding-left: 10px; }
+        .item-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px; border-bottom: 1px solid var(--dim-red); transition: 0.2s;
+        }
+        .item-row:hover { background: rgba(255, 0, 51, 0.05); }
+        .del-btn {
+            background: transparent; border: 1px solid var(--red); color: var(--red);
+            padding: 5px 10px; cursor: pointer; font-family: inherit;
+        }
+        .del-btn:hover { background: var(--red); color: white; }
+        .error-text { color: yellow; font-size: 0.8rem; display: none; margin-bottom: 10px; }
+        
+        /* 狀態標籤樣式 */
+        .status-tag { font-size: 0.8rem; padding: 2px 6px; border: 1px solid; margin-left: 5px; }
+        .st-ONLINE { color: #00ff41; border-color: #00ff41; }
+        .st-OFFLINE { color: #555; border-color: #555; }
+
+        /* Excel 按鈕樣式 */
+        .excel-link {
+            text-decoration: none; border: 1px solid var(--green); color: var(--green);
+            padding: 2px 8px; font-size: 0.8rem; margin-right: 10px;
+            transition: 0.2s; display: inline-block;
+        }
+        .excel-link:hover { background: var(--green); color: black; box-shadow: 0 0 10px var(--green); }
+        .excel-pending {
+            color: #888; font-size: 0.8rem; border: 1px dashed #666; padding: 2px 8px; margin-right: 10px;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        /* --- Cyberpunk Checkbox 樣式 --- */
+        .cyber-options-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        /* 隱藏原本的醜醜 checkbox */
+        .cyber-check-input {
+            display: none;
+        }
+
+        /* 自訂的標籤按鈕外觀 */
+        .cyber-check-label {
+            position: relative;
+            display: inline-block;
+            padding: 8px 16px;
+            border: 1px solid var(--dim-red);
+            color: var(--dim-red);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+            background: rgba(0, 0, 0, 0.5);
+            user-select: none; /* 防止連點時選取文字 */
+        }
+
+        /* 滑鼠移過去的效果 */
+        .cyber-check-label:hover {
+            border-color: var(--red);
+            color: var(--red);
+            box-shadow: 0 0 8px rgba(255, 0, 51, 0.3);
+        }
+
+        /* ★ 被選取時的狀態 (Checked) ★ */
+        .cyber-check-input:checked + .cyber-check-label {
+            background: var(--red);
+            color: black;
+            border-color: var(--red);
+            box-shadow: 0 0 15px var(--red);
+            text-shadow: none;
+        }
+
+        /* 裝飾用的小方塊 (可選) */
+        .cyber-check-label::before {
+            content: '[ ] ';
+            margin-right: 5px;
+            opacity: 0.5;
+        }
+        .cyber-check-input:checked + .cyber-check-label::before {
+            content: '[X] ';
+            opacity: 1;
+            color: black;
+        }
+        /* --- 日期選擇器專用樣式 --- */
+        input[type="datetime-local"] {
+            font-family: 'Courier New', monospace;
+            color: var(--red);
+        }
+
+        /* 把原本黑色的日曆小圖示變成紅色或白色，才看得到 */
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(15%) sepia(90%) saturate(6000%) hue-rotate(345deg) brightness(90%) contrast(110%);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud-overlay">
+        <div class="hud-box">
+            <div class="hud-inner">
+                <div class="hud-header">/// SYSTEM MESSAGE</div>
+                <div class="hud-content" id="hud-text">...</div>
+                <div class="hud-actions" id="hud-btns"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-layer">
+        <div class="login-box">
+            <div class="login-title">[ ACCESS CONTROL ]</div>
+            <div id="login-error" class="error-text"></div>
+            <input type="email" id="login-email" placeholder="ADMIN EMAIL">
+            <input type="password" id="login-pass" placeholder="PASSWORD">
+            <button class="btn-main" id="btn-login">AUTHENTICATE</button>
+        </div>
+    </div>
+
+    <div id="admin-panel">
+        <header>
+            <div class="brand-area">
+                <div>
+                    <div class="brand-logo">中情局系統</div>
+                    <div class="brand-sub">總部後台</div>
+                </div>
+            </div>
+            
+            <nav class="nav-bar">
+                <button class="nav-btn active" onclick="switchTab('missions')">[ MISSIONS ]</button>
+                <button class="nav-btn" onclick="switchTab('schools')">[ SCHOOL ]</button>
+                <button class="nav-btn" onclick="location.href='index.html'">[ BACK ]</button>
+                <button class="nav-btn btn-logout" id="btn-logout">LOGOUT</button>
+            </nav>
+        </header>
+
+        <div id="tab-missions" class="view-section active">
+            <div class="section-box">
+                <div style="margin-bottom:15px; color:var(--red)">/// 新增活動</div>
+                <input type="text" id="evt-name" placeholder="MISSION NAME / 任務名稱">
+                <div class="row" style="padding-top: 18px;">
+                    <div style="flex: 2; position: relative;">
+                        <span style="position:absolute; top:-18px; left:0; font-size:0.7rem; color:var(--dim-red);">活動時間<span>
+                        <input type="datetime-local" id="evt-date" style="width: 100%;">
+                    </div>
+
+                    <div style="flex: 1; position: relative;">
+                        <span style="position:absolute; top:-18px; left:0; font-size:0.7rem; color:var(--dim-red);">最大參加人數</span>
+                        <input type="number" id="evt-max" value="10" placeholder="MAX">
+                    </div>
+                </div>
+                <div style="border: 1px solid var(--dim-red); padding: 10px; margin: 10px 0; background: rgba(0,0,0,0.3);">
+                    <div style="color: var(--red); font-size: 0.8rem; margin-bottom: 8px;">///統計資料</div>
+                    
+                    <div style="border: 1px solid var(--dim-red); padding: 15px; margin: 20px 0; background: rgba(20, 0, 0, 0.4);">
+                        <div style="color: var(--red); font-size: 0.8rem; margin-bottom: 12px; letter-spacing: 2px;">
+                            /// 選取活動需要的資料內容
+                        </div>
+                        
+                        <div class="cyber-options-container">
+                            
+                            <label>
+                                <input type="checkbox" class="field-check cyber-check-input" value="身分證字號" checked>
+                                <span class="cyber-check-label">身分證</span>
+                            </label>
+
+                            <label>
+                                <input type="checkbox" class="field-check cyber-check-input" value="姓名" checked>
+                                <span class="cyber-check-label">名字</span>
+                            </label>
+
+                            <label>
+                                <input type="checkbox" class="field-check cyber-check-input" value="單位/班級" checked>
+                                <span class="cyber-check-label">學校</span>
+                            </label>
+
+                            <label>
+                                <input type="checkbox" class="field-check cyber-check-input" value="聯絡電話">
+                                <span class="cyber-check-label">手機號碼</span>
+                            </label>
+
+                            <label>
+                                <input type="checkbox" class="field-check cyber-check-input" value="備註">
+                                <span class="cyber-check-label">備註</span>
+                            </label>
+
+                        </div>
+                        <div style="position: relative;">
+                            <span style="color:var(--dim-red); font-size:0.8rem; position:absolute; top:-20px; right:0;">MANUAL INPUT_</span>
+                            <input type="text" id="evt-custom-fields" 
+                                placeholder="其他自訂欄位 (用逗號 , 分隔)，例如：緊急聯絡人,過敏史" 
+                                style="border: 1px dashed var(--dim-red); font-size: 0.9rem; background: rgba(0,0,0,0.5); color: var(--red);">
+                        </div>
+                    </div>
+                </div>
+                <button class="btn-main" id="btn-create">發布任務</button>
+            </div>
+
+            <div class="list-header">進行中任務...</div>
+            <div id="event-list">調用情報局資料</div>
+        </div>
+
+        <div id="tab-schools" class="view-section">
+            <div class="section-box">
+                <div style="margin-bottom:15px; color:var(--white)">/// REGISTER ALLIED UNIT</div>
+                <div class="row">
+                    <input type="text" id="sch-code" placeholder="UNIT ID (e.g. NUK-01)" style="flex:1">
+                    <input type="text" id="sch-name" placeholder="UNIT NAME" style="flex:2">
+                </div>
+                <div class="row">
+                    <select id="sch-type" style="flex:1">
+                        <option value="RECON">RECON (偵查)</option>
+                        <option value="ASSAULT">ASSAULT (突擊)</option>
+                        <option value="SUPPORT">SUPPORT (支援)</option>
+                        <option value="UNKNOWN">UNKNOWN (未知)</option>
+                    </select>
+                    <select id="sch-status" style="flex:1">
+                        <option value="ONLINE">ONLINE</option>
+                        <option value="OFFLINE">OFFLINE</option>
+                    </select>
+                </div>
+                <button class="btn-main" id="btn-add-school">REGISTER UNIT</button>
+            </div>
+            
+            <div class="list-header">DETECTED UNITS</div>
+            <div id="school-list" style="padding-bottom: 20px;">Scanning frequencies...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, push, set, remove, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // ★★★ 設定區：請將這裡換成你的 Google Apps Script 網址 (記得要有 /exec 結尾) ★★★
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzF_BDVknII3UYxw1B6NogxWq-LOjO7OrlLs_ibeeDEoz1-f9SIYE4Otx1GjeVX5MOt/exec"; 
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA_ZvJSGxddMfZ9zfq-51L65UPbSMP_Cng",
+            authDomain: "survival-game-6c3c3.firebaseapp.com",
+            databaseURL: "https://survival-game-6c3c3-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "survival-game-6c3c3",
+            storageBucket: "survival-game-6c3c3.firebasestorage.app",
+            messagingSenderId: "403646809893",
+            appId: "1:403646809893:web:84d94bcd134dcbeb29bccc"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // --- HUD ---
+        window.hud = {
+            el: document.getElementById('hud-overlay'),
+            text: document.getElementById('hud-text'),
+            btns: document.getElementById('hud-btns'),
+            
+            msg: function(message) {
+                this.text.innerText = message;
+                this.btns.innerHTML = `<button class="hud-btn" onclick="hud.close()">ACKNOWLEDGED</button>`;
+                this.el.style.display = 'flex';
+            },
+
+            confirm: function(message, onYes) {
+                this.text.innerText = message;
+                this.btns.innerHTML = '';
+                
+                const btnYes = document.createElement('button');
+                btnYes.className = 'hud-btn';
+                btnYes.innerText = 'CONFIRM';
+                btnYes.onclick = () => { onYes(); hud.close(); };
+                
+                const btnNo = document.createElement('button');
+                btnNo.className = 'hud-btn cancel';
+                btnNo.innerText = 'CANCEL';
+                btnNo.onclick = () => hud.close();
+
+                this.btns.appendChild(btnNo);
+                this.btns.appendChild(btnYes);
+                this.el.style.display = 'flex';
+            },
+
+            close: function() { this.el.style.display = 'none'; }
+        };
+
+        // UI 綁定
+        const ui = {
+            layer: document.getElementById('login-layer'),
+            panel: document.getElementById('admin-panel'),
+            email: document.getElementById('login-email'),
+            pass: document.getElementById('login-pass'),
+            loginBtn: document.getElementById('btn-login'),
+            logoutBtn: document.getElementById('btn-logout'),
+            err: document.getElementById('login-error'),
+            
+            // 活動 UI
+            name: document.getElementById('evt-name'),
+            date: document.getElementById('evt-date'),
+            max: document.getElementById('evt-max'),
+            createBtn: document.getElementById('btn-create'),
+            list: document.getElementById('event-list'),
+
+            // 學校 UI
+            sCode: document.getElementById('sch-code'),
+            sName: document.getElementById('sch-name'),
+            sType: document.getElementById('sch-type'),
+            sStatus: document.getElementById('sch-status'),
+            addSchoolBtn: document.getElementById('btn-add-school'),
+            schoolList: document.getElementById('school-list')
+        };
+
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+            const buttons = document.querySelectorAll('.nav-btn');
+            if(tabName === 'missions') buttons[0].classList.add('active');
+            if(tabName === 'schools') buttons[1].classList.add('active');
+        };
+
+        // --- 1. Auth ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                ui.layer.style.display = 'none';
+                ui.panel.style.display = 'block';
+                initDatabaseListener(); // 啟動監聽
+            } else {
+                ui.layer.style.display = 'flex';
+                ui.panel.style.display = 'none';
+            }
+        });
+
+        ui.loginBtn.addEventListener('click', () => {
+            ui.loginBtn.innerText = "VERIFYING...";
+            signInWithEmailAndPassword(auth, ui.email.value, ui.pass.value)
+                .then(() => {
+                    ui.loginBtn.innerText = "AUTHENTICATE";
+                    ui.email.value = ''; ui.pass.value = ''; ui.err.style.display = 'none';
+                })
+                .catch((error) => {
+                    ui.loginBtn.innerText = "AUTHENTICATE";
+                    ui.err.innerText = "ACCESS DENIED: " + error.code;
+                    ui.err.style.display = 'block';
+                });
+        });
+
+        ui.logoutBtn.addEventListener('click', () => {
+            hud.confirm("TERMINATE SESSION?", () => signOut(auth).then(() => location.reload()));
+        });
+
+        // --- 2. Database Listeners ---
+        function initDatabaseListener() {
+            // (A) 監聽活動 (Events) - 已加入 Excel 按鈕邏輯
+            onValue(ref(db, 'events'), (snapshot) => {
+                ui.list.innerHTML = '';
+                if(!snapshot.exists()) {
+                    ui.list.innerHTML = '<div style="color:#666; padding:10px;">NO ACTIVE MISSIONS.</div>';
+                } else {
+                    snapshot.forEach((child) => {
+                        const key = child.key;
+                        const data = child.val();
+                        const div = document.createElement('div');
+                        div.className = 'item-row';
+
+                        // 判斷 Excel 網址的狀態
+                        let excelHtml = '';
+                        if (data.excelUrl && data.excelUrl.startsWith("http")) {
+                            // 成功產生，顯示綠色按鈕
+                            excelHtml = `<a href="${data.excelUrl}" target="_blank" class="excel-link">[ OPEN EXCEL ]</a>`;
+                        } else if (data.excelUrl === "CREATING...") {
+                            // 正在產生
+                            excelHtml = `<span class="excel-pending">[ BUILDING EXCEL... ]</span>`;
+                        } else {
+                            // 沒有或錯誤
+                            excelHtml = `<span class="excel-pending" style="color:#500">[ NO DATA ]</span>`;
+                        }
+
+                        div.innerHTML = `
+                            <div>
+                                <strong style="color:white; font-size:1.1rem">${data.name}</strong>
+                                
+                                <div style="color: var(--green); font-size: 0.9rem; margin: 4px 0;">
+                                    TIME: ${data.eventDate ? data.eventDate.replace('T', ' ') : 'N/A'}
+                                </div>
+
+                                <div style="font-size:0.8rem; color:#884444;">
+                                    ${excelHtml}
+                                    CAPACITY: ${data.maxCapacity}
+                                </div>
+                            </div>
+                        `;
+                        const btn = document.createElement('button');
+                        btn.className = 'del-btn';
+                        btn.innerText = 'DELETE';
+                        btn.onclick = () => {
+                            hud.confirm(`DELETE MISSION:\n[ ${data.name} ] ?`, () => {
+                                remove(ref(db, `events/${key}`));
+                            });
+                        };
+                        div.appendChild(btn);
+                        ui.list.appendChild(div);
+                    });
+                }
+            });
+
+            // (B) 監聽學校 (Schools)
+            onValue(ref(db, 'schools'), (snapshot) => {
+                ui.schoolList.innerHTML = '';
+                if(!snapshot.exists()) {
+                    ui.schoolList.innerHTML = '<div style="color:#666; padding:10px;">NO SIGNALS DETECTED.</div>';
+                } else {
+                    snapshot.forEach((child) => {
+                        const key = child.key;
+                        const data = child.val();
+                        const div = document.createElement('div');
+                        div.className = 'item-row';
+                        
+                        // 狀態顏色 Class
+                        const stClass = data.status === 'ONLINE' ? 'st-ONLINE' : 'st-OFFLINE';
+
+                        div.innerHTML = `
+                            <div>
+                                <span style="color:var(--white); font-weight:bold;">${data.code}</span>
+                                <span class="status-tag ${stClass}">${data.status}</span>
+                                <div style="color:#888; font-size:0.9rem; margin-top:5px">
+                                    ${data.name} <span style="color:#444">|</span> ${data.type}
+                                </div>
+                            </div>
+                        `;
+                        const btn = document.createElement('button');
+                        btn.className = 'del-btn';
+                        btn.innerText = 'PURGE';
+                        btn.onclick = () => {
+                            hud.confirm(`REMOVE UNIT SIGNAL:\n[ ${data.code} ] ?`, () => {
+                                remove(ref(db, `schools/${key}`));
+                            });
+                        };
+                        div.appendChild(btn);
+                        ui.schoolList.appendChild(div);
+                    });
+                }
+            });
+        }
+
+        // --- 3. 新增資料邏輯 ---
+        
+        // (A) 新增活動 + 動態欄位邏輯
+        ui.createBtn.addEventListener('click', () => {
+            const n = ui.name.value.trim();
+            const m = parseInt(ui.max.value);
+            const d = ui.date.value; // ★ 新增：獲取時間
+            
+            if(!n || !m || !d) { hud.msg("ERROR: MISSING INPUT DATA (NAME/DATE/MAX)"); return; }
+            if (!GOOGLE_SCRIPT_URL.startsWith("http")) { hud.msg("SYSTEM ERROR: GAS URL INVALID."); return; }
+
+            // ★ 1. 收集欄位資料
+            let columns = ["報名時間"]; // 預設第一欄永遠是時間
+            
+            // 取得勾選的項目
+            document.querySelectorAll('.field-check:checked').forEach(el => {
+                columns.push(el.value);
+            });
+
+            // 取得手動輸入的項目 (用逗號分隔)
+            const customInput = document.getElementById('evt-custom-fields').value.trim();
+            if (customInput) {
+                // 將輸入字串切開，去除空白，加入陣列
+                const customs = customInput.split(/[,，]/).map(s => s.trim()).filter(s => s);
+                columns.push(...customs);
+            }
+
+            // UI 鎖定
+            ui.createBtn.disabled = true; ui.createBtn.innerText = "INITIALIZING...";
+
+            // ★ 2. 寫入 Firebase (包含 columns 資訊，這樣報名頁面才知道要顯示什麼格子)
+            const newRef = push(ref(db, 'events'));
+            const eventKey = newRef.key;
+
+            set(newRef, {
+                name: n, 
+                maxCapacity: m, 
+                eventDate: d,     // ★ 新增：寫入活動時間
+                columns: columns, 
+                createdAt: serverTimestamp(),
+                excelUrl: "CREATING..." 
+            })
+            .then(() => {
+                // ★ 3. 呼叫 GAS，把 columns 傳過去建立 Excel 表頭
+                fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    mode: "no-cors", 
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        action: "create", 
+                        name: n, 
+                        key: eventKey,
+                        headers: columns // 傳送標題陣列
+                    })
+                });
+
+                // 重置介面
+                ui.name.value = ''; 
+                document.getElementById('evt-custom-fields').value = ''; // 清空自訂欄位
+                ui.createBtn.disabled = false; 
+                ui.createBtn.innerText = "PUBLISH MISSION";
+                hud.msg("MISSION DEPLOYED. EXCEL STRUCTURE GENERATING.");
+            })
+            .catch((e) => {
+                hud.msg("DEPLOY FAILED: " + e.message);
+                ui.createBtn.disabled = false;
+                ui.createBtn.innerText = "PUBLISH MISSION";
+            });
+        });
+
+        // (B) 新增學校
+        ui.addSchoolBtn.addEventListener('click', () => {
+            const c = ui.sCode.value.trim();
+            const n = ui.sName.value.trim();
+            const t = ui.sType.value;
+            const s = ui.sStatus.value;
+
+            if(!c || !n) { hud.msg("ERROR: MISSING UNIT INFO"); return; }
+
+            ui.addSchoolBtn.disabled = true; ui.addSchoolBtn.innerText = "UPLOADING...";
+
+            push(ref(db, 'schools'), {
+                code: c,
+                name: n,
+                type: t,
+                status: s,
+                updatedAt: serverTimestamp()
+            }).then(() => {
+                ui.sCode.value = ''; ui.sName.value = '';
+                ui.addSchoolBtn.disabled = false; ui.addSchoolBtn.innerText = "REGISTER UNIT";
+                hud.msg("UNIT REGISTERED TO NETWORK.");
+            }).catch(e => {
+                hud.msg("UPLOAD FAILED: " + e.message);
+                ui.addSchoolBtn.disabled = false; ui.addSchoolBtn.innerText = "REGISTER UNIT";
+            });
+        });
+
+    </script>
+</body>
+</html>
