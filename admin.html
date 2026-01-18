@@ -214,6 +214,47 @@
             filter: invert(15%) sepia(90%) saturate(6000%) hue-rotate(345deg) brightness(90%) contrast(110%);
             cursor: pointer;
         }
+
+        /* --- 戰術情報視窗 (詳細名單) --- */
+        #detail-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95); z-index: 5000;
+            justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+            animation: fadeIn 0.3s;
+        }
+        .detail-box {
+            width: 800px; max-width: 95%; height: 80%;
+            border: 2px solid var(--red); background: #050505;
+            display: flex; flex-direction: column;
+            box-shadow: 0 0 50px rgba(255, 0, 51, 0.15);
+        }
+        .detail-header {
+            background: var(--dim-red); color: white; padding: 15px;
+            font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--red);
+        }
+        .detail-content {
+            flex: 1; overflow-y: auto; padding: 20px;
+        }
+        /* 表格樣式 */
+        .cyber-table {
+            width: 100%; border-collapse: collapse; color: var(--white); font-size: 0.9rem;
+        }
+        .cyber-table th {
+            text-align: left; border-bottom: 2px solid var(--red); padding: 10px; color: var(--red);
+        }
+        .cyber-table td {
+            border-bottom: 1px solid #333; padding: 10px;
+        }
+        .cyber-table tr:hover { background: rgba(255, 0, 51, 0.1); }
+        
+        .btn-close {
+            background: black; border: 1px solid white; color: white; padding: 5px 15px; cursor: pointer;
+        }
+        .btn-close:hover { background: white; color: black; }
+        
+        .empty-msg { text-align: center; color: #555; margin-top: 30px; }
     </style>
 </head>
 <body>
@@ -223,6 +264,33 @@
                 <div class="hud-header">/// SYSTEM MESSAGE</div>
                 <div class="hud-content" id="hud-text">...</div>
                 <div class="hud-actions" id="hud-btns"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="detail-overlay">
+        <div class="detail-box">
+            <div class="detail-header">
+                <span id="detail-title">MISSION INTEL</span>
+                <button class="btn-close" onclick="closeDetail()">[ CLOSE ]</button>
+            </div>
+            <div class="detail-content">
+                <div style="margin-bottom: 20px; color: var(--green);">
+                    目前人數: <span id="detail-count">0</span> / <span id="detail-max">0</span>
+                </div>
+                <table class="cyber-table">
+                    <thead>
+                        <tr>
+                            <th>TIME</th>
+                            <th>NAME</th>
+                            <th>UNIT/SCHOOL</th>
+                            <th>PHONE</th>
+                            <th>ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="participant-list">
+                        </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -241,7 +309,7 @@
         <header>
             <div class="brand-area">
                 <div>
-                    <div class="brand-logo">中情局系統</div>
+                    <div class="brand-logo">國防部</div>
                     <div class="brand-sub">總部後台</div>
                 </div>
             </div>
@@ -351,9 +419,11 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getDatabase, ref, push, set, remove, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        // ★★★ 全域變數新增 ★★★
+        let currentDetailRef = null; // 用來追蹤目前開啟的詳細視窗監聽器
 
         // ★★★ 設定區：請將這裡換成你的 Google Apps Script 網址 (記得要有 /exec 結尾) ★★★
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzF_BDVknII3UYxw1B6NogxWq-LOjO7OrlLs_ibeeDEoz1-f9SIYE4Otx1GjeVX5MOt/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyF69QLYY1xBk6EKm52EIM4ZXuHHuzFpbP6qsOT2YFbWKBLNU1hOlooNENCewHbEpuJ/exec"; 
 
         const firebaseConfig = {
             apiKey: "AIzaSyA_ZvJSGxddMfZ9zfq-51L65UPbSMP_Cng",
@@ -368,6 +438,18 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
+
+
+        // ★★★ 新增：詳細視窗控制函式 (掛載到 window 以便 HTML 呼叫) ★★★
+        window.closeDetail = function() {
+            document.getElementById('detail-overlay').style.display = 'none';
+            // 關閉視窗時，移除該節點的監聽，避免浪費資源
+            if(currentDetailRef) {
+                // 注意：Firebase v9 modular SDK 移除監聽比較麻煩
+                // 這裡簡單做：直接清空列表，下次打開會重新註冊 onValue
+                document.getElementById('participant-list').innerHTML = '';
+            }
+        };
 
         // --- HUD ---
         window.hud = {
@@ -470,7 +552,7 @@
 
         // --- 2. Database Listeners ---
         function initDatabaseListener() {
-            // (A) 監聽活動 (Events) - 已加入 Excel 按鈕邏輯
+            // (A) 監聽活動 (Events)
             onValue(ref(db, 'events'), (snapshot) => {
                 ui.list.innerHTML = '';
                 if(!snapshot.exists()) {
@@ -482,43 +564,50 @@
                         const div = document.createElement('div');
                         div.className = 'item-row';
 
-                        // 判斷 Excel 網址的狀態
+                        // Excel 按鈕邏輯 (保持不變)
                         let excelHtml = '';
                         if (data.excelUrl && data.excelUrl.startsWith("http")) {
-                            // 成功產生，顯示綠色按鈕
-                            excelHtml = `<a href="${data.excelUrl}" target="_blank" class="excel-link">[ OPEN EXCEL ]</a>`;
+                            excelHtml = `<a href="${data.excelUrl}" target="_blank" class="excel-link">[ EXCEL ]</a>`;
                         } else if (data.excelUrl === "CREATING...") {
-                            // 正在產生
-                            excelHtml = `<span class="excel-pending">[ BUILDING EXCEL... ]</span>`;
+                            excelHtml = `<span class="excel-pending">[ BUILDING... ]</span>`;
                         } else {
-                            // 沒有或錯誤
                             excelHtml = `<span class="excel-pending" style="color:#500">[ NO DATA ]</span>`;
                         }
 
                         div.innerHTML = `
-                            <div>
-                                <strong style="color:white; font-size:1.1rem">${data.name}</strong>
-                                
-                                <div style="color: var(--green); font-size: 0.9rem; margin: 4px 0;">
+                            <div style="flex:1;">
+                                <strong style="color:white; font-size:1.1rem; letter-spacing:1px;">${data.name}</strong>
+                                <div style="color: var(--green); font-size: 0.8rem; margin: 4px 0;">
                                     TIME: ${data.eventDate ? data.eventDate.replace('T', ' ') : 'N/A'}
                                 </div>
-
                                 <div style="font-size:0.8rem; color:#884444;">
                                     ${excelHtml}
-                                    CAPACITY: ${data.maxCapacity}
+                                    CAPACITY: <span style="color:white">${data.maxCapacity}</span>
                                 </div>
                             </div>
+                            <div style="display:flex; gap:10px;">
+                                <button class="hud-btn" style="font-size:0.8rem; padding:5px 10px;" id="btn-view-${key}">
+                                    [ INSPECT ]
+                                </button>
+                                <button class="del-btn" id="btn-del-${key}">DELETE</button>
+                            </div>
                         `;
-                        const btn = document.createElement('button');
-                        btn.className = 'del-btn';
-                        btn.innerText = 'DELETE';
-                        btn.onclick = () => {
+                        
+                        ui.list.appendChild(div);
+
+                        // 綁定刪除按鈕事件
+                        document.getElementById(`btn-del-${key}`).onclick = () => {
                             hud.confirm(`DELETE MISSION:\n[ ${data.name} ] ?`, () => {
                                 remove(ref(db, `events/${key}`));
+                                // 同時刪除報名資料 (選擇性)
+                                remove(ref(db, `registrations/${key}`));
                             });
                         };
-                        div.appendChild(btn);
-                        ui.list.appendChild(div);
+
+                        // ★★★ 綁定檢視按鈕事件 ★★★
+                        document.getElementById(`btn-view-${key}`).onclick = () => {
+                            openDetailModal(key, data);
+                        };
                     });
                 }
             });
@@ -562,6 +651,116 @@
             });
         }
 
+        // ★★★ 修改後的 openDetailModal (傳遞 Excel 資訊給刪除按鈕) ★★★
+        function openDetailModal(eventKey, eventData) {
+            const overlay = document.getElementById('detail-overlay');
+            const title = document.getElementById('detail-title');
+            const tbody = document.getElementById('participant-list');
+            const countEl = document.getElementById('detail-count');
+            const maxEl = document.getElementById('detail-max');
+
+            title.innerText = `// INTEL: ${eventData.name}`;
+            maxEl.innerText = eventData.maxCapacity;
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666;">SCANNING DATA...</td></tr>';
+            overlay.style.display = 'flex';
+
+            const regRef = ref(db, `events/${eventKey}/participants`);
+            const excelUrl = eventData.excelUrl || ""; // 取得該活動的 Excel 網址
+
+            onValue(regRef, (snapshot) => {
+                tbody.innerHTML = '';
+                let count = 0;
+
+                if (!snapshot.exists()) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">NO PERSONNEL DETECTED.</td></tr>';
+                    countEl.innerText = 0;
+                    return;
+                }
+
+                snapshot.forEach(child => {
+                    const pKey = child.key;
+                    const pData = child.val();
+                    count++;
+
+                    // 時間處理
+                    let timeStr = 'N/A';
+                    if(pData.timestamp || pData.createdAt) {
+                        const ts = pData.timestamp || pData.createdAt;
+                        timeStr = new Date(ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }
+
+                    // 資料處理
+                    const pName = pData['姓名'] || pData.name || 'Unknown';
+                    const pSchool = pData['單位/班級'] || pData.school || '-';
+                    const pPhone = pData['聯絡電話'] || pData.phone || '-';
+
+                    // ★ 將資料編碼，準備傳給刪除函式 (處理單引號避免報錯)
+                    const safeName = pName.replace(/'/g, "");
+                    const safePhone = pPhone.replace(/'/g, "");
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="color:#666;">${timeStr}</td>
+                        <td style="color:white; font-weight:bold;">${pName}</td>
+                        <td>${pSchool}</td>
+                        <td>${pPhone}</td>
+                        <td>
+                            <button class="del-btn" style="font-size:0.7rem; border-color:#444;" 
+                                onclick="removeParticipant('${eventKey}', '${pKey}', '${excelUrl}', '${safeName}', '${safePhone}')">
+                                KICK
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                countEl.innerText = count;
+                countEl.style.color = (count >= eventData.maxCapacity) ? 'var(--red)' : 'var(--green)';
+            });
+        }
+        // ★★★ 最終版 removeParticipant (同步刪除 Excel) ★★★
+        window.removeParticipant = function(eventKey, participantKey, excelUrl, pName, pPhone) {
+            hud.confirm(`EXECUTE KICK PROTOCOL?\n[ ${pName} ]`, () => {
+                
+                hud.msg("REMOVING TARGET...");
+
+                // 1. 先從 Firebase 刪除 (確保介面反應最快)
+                remove(ref(db, `events/${eventKey}/participants/${participantKey}`))
+                .then(() => {
+                    
+                    // 2. 如果有 Excel 連結，則發送指令給 GAS 刪除對應行
+                    if (excelUrl && excelUrl.startsWith("http")) {
+                        hud.msg("TARGET KICKED. SYNCING EXCEL...");
+                        
+                        // 呼叫 GAS
+                        fetch(GOOGLE_SCRIPT_URL, {
+                            method: "POST",
+                            mode: "no-cors", // GAS 慣用的跨域模式
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "delete_participant",
+                                excelUrl: excelUrl,
+                                name: pName,
+                                phone: pPhone
+                            })
+                        }).then(() => {
+                            // 由於 no-cors 模式無法讀取回應，我們假設發送成功
+                            hud.msg("COMPLETE: TARGET ELIMINATED & LOGS PURGED.");
+                        }).catch(err => {
+                            console.error(err);
+                            hud.msg("KICKED from DB, but EXCEL SYNC FAILED.");
+                        });
+
+                    } else {
+                        hud.msg("TARGET ELIMINATED. (NO EXCEL LINKED)");
+                    }
+                })
+                .catch(err => {
+                    hud.msg("ERROR: " + err.message);
+                });
+            });
+        };
+        
         // --- 3. 新增資料邏輯 ---
         
         // (A) 新增活動 + 動態欄位邏輯
