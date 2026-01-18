@@ -75,15 +75,15 @@
     <div id="boot"></div>
 
     <div id="terminal">
-        <a href="index.html" class="nav-back">[ EXIT TO MENU ]</a>
+        <a href="index.html" class="nav-back">[ 返回首頁 ]</a>
 
-        <h1><span>SURVIVAL_OS</span><small style="font-size:0.8rem">V.3.1</small></h1>
+        <h1><span>愛國者行動</span><small style="font-size:0.8rem">V.3.1</small></h1>
         
         <select id="sel-mission"><option>INITIALIZING...</option></select>
         
         <div class="status-bar">
             <div style="display:flex; justify-content:space-between; font-size:0.8rem">
-                <span>SQUAD CAPACITY</span>
+                <span>參與任務人數</span>
                 <span id="count-display">0 / --</span>
             </div>
             <div class="bar-grid" id="bar"></div>
@@ -91,12 +91,11 @@
 
         <div id="dynamic-form-area">
             <div style="text-align:center; color:#666; padding:20px;">
-                > SELECT A MISSION TO LOAD PROTOCOLS...
+                > 選擇任務以展開報名表單...
             </div>
         </div>
 
         <button id="btn-submit" disabled>WAITING FOR MISSION...</button>
-        
         <div class="log-area" id="logs"></div>
     </div>
 
@@ -119,7 +118,7 @@
         const db = getDatabase(app);
         
         // ★ 請確認你的 Google Apps Script 網址是否正確 (記得重新部署為新版本)
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzF_BDVknII3UYxw1B6NogxWq-LOjO7OrlLs_ibeeDEoz1-f9SIYE4Otx1GjeVX5MOt/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyF69QLYY1xBk6EKm52EIM4ZXuHHuzFpbP6qsOT2YFbWKBLNU1hOlooNENCewHbEpuJ/exec"; 
 
         // UI 綁定
         const ui = {
@@ -168,7 +167,7 @@
 
         // 1. 讀取活動列表
         onValue(ref(db, 'events'), snap => {
-            ui.sel.innerHTML = '<option value="">-- SELECT MISSION --</option>';
+            ui.sel.innerHTML = '<option value="">-- 選擇任務 --</option>';
             if(snap.exists()){
                 snap.forEach(c => {
                     const data = c.val();
